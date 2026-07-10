@@ -51,6 +51,10 @@ function WaitlistModal({ onClose }: { onClose: () => void }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email }),
       });
+           if (res.status === 409) {
+        setError("You're already on the mail list!");
+        return;
+      }
       if (!res.ok) throw new Error();
       setSubmitted(true);
     } catch {
