@@ -28,7 +28,7 @@ exports.handler = async (event) => {
     });
     const sheets = google.sheets({ version: "v4", auth });
 
-   const testEmails = ["text@mail.com", "marty16600@gmail.com";"francy.saxon@gmail.com"];
+   const testEmails = ["text@mail.com", "marty16600@gmail.com", "francy.saxon@gmail.com"];
 if (!testEmails.includes(email)) {
       const existing = await sheets.spreadsheets.values.get({
         spreadsheetId: process.env.GOOGLE_SHEET_ID,
