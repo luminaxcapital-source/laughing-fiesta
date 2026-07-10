@@ -56,19 +56,12 @@ if (!testEmails.includes(email)) {
       },
     });
 
-    const logoUrl = "https://luminaxcapital.com/logo.png";
-
-    await transporter.sendMail({
+       await transporter.sendMail({
       from: `"LuminaX" <${process.env.GMAIL_USER}>`,
       to: email,
       subject: "You're on the LuminaX waitlist",
       html: `
       <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#ffffff;">
-        <tr>
-          <td align="center" style="background:#000000; padding:28px 16px;">
-            <img src="${logoUrl}" alt="LuminaX" width="190" style="display:block; height:auto; width:190px;" />
-          </td>
-        </tr>
         <tr>
           <td align="center" style="background:#ffffff; padding:40px 16px;">
             <table role="presentation" width="480" cellpadding="0" cellspacing="0" style="max-width:480px; width:100%; font-family:-apple-system,Helvetica,Arial,sans-serif;">
