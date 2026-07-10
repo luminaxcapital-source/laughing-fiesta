@@ -42,7 +42,7 @@ exports.handler = async (event) => {
       },
     });
 
-    const logoUrl = "https://luminaxhomepage.netlify.app/logo.png";
+    const logoUrl = "https://luminaxcapital.com/logo.png";
 
     await transporter.sendMail({
       from: `"LuminaX" <${process.env.GMAIL_USER}>`,
