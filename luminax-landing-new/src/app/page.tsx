@@ -232,7 +232,7 @@ function ParticleStar() {
     if (!ctx) return;
 
     const isMobile = window.innerWidth < 640;
-    const dpr = Math.min(window.devicePixelRatio || 1, isMobile ? 1.5 : 2);
+    const dpr = Math.min(window.devicePixelRatio || 1, isMobile ? 1 : 2);
     let width = 0;
     let height = 0;
 
@@ -248,7 +248,7 @@ function ParticleStar() {
     resize();
     window.addEventListener("resize", resize);
 
-    const COUNT = isMobile ? 1600 : 3800;
+    const COUNT = isMobile ? 900 : 3800;
     const particles = Array.from({ length: COUNT }, () => {
       const u = Math.random();
       const v = Math.random();
@@ -266,7 +266,7 @@ function ParticleStar() {
       };
     });
 
-    const AMBIENT_COUNT = isMobile ? 150 : 450;
+    const AMBIENT_COUNT = isMobile ? 70 : 450;
     const ambient = Array.from({ length: AMBIENT_COUNT }, () => {
       const roll = Math.random();
       return {
@@ -347,8 +347,14 @@ function ParticleStar() {
     window.addEventListener("luminax-explode", onExplode);
     window.addEventListener("luminax-reform", onReform);
 
-    let raf = 0;
+        let raf = 0;
+    let frameCount = 0;
     function draw() {
+      raf = requestAnimationFrame(draw);
+      if (isMobile) {
+        frameCount++;
+        if (frameCount % 2 !== 0) return;
+      }
       ctx!.clearRect(0, 0, width, height);
       rotY += 0.0011;
       time += 1;
@@ -444,13 +450,11 @@ function ParticleStar() {
           ctx!.fill();
         }
 
-        ctx!.beginPath();
+                ctx!.beginPath();
         ctx!.arc(cx + pt.x, cy + pt.y, pt.bright ? size * 1.8 : size, 0, Math.PI * 2);
         ctx!.fillStyle = color;
         ctx!.fill();
       }
-
-      raf = requestAnimationFrame(draw);
     }
     draw();
 
