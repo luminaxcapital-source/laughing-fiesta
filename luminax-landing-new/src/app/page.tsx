@@ -501,6 +501,7 @@ function ParticleStar() {
     window.addEventListener("luminax-reform", onReform);
 
     const tmpVec = new THREE.Vector3();
+    const screenMat = new THREE.Matrix4();
     let raf = 0;
     function draw() {
       raf = requestAnimationFrame(draw);
@@ -517,7 +518,14 @@ function ParticleStar() {
       const sizeAttr = starGeometry.getAttribute("aSize") as THREE.BufferAttribute;
       const hovering = hoverX > -50000;
 
-      if (hovering) group.updateMatrixWorld(true);
+      if (hovering) {
+        group.updateMatrixWorld(true);
+        camera.updateMatrixWorld();
+        // Precompute one screen-space matrix per frame instead of running
+        // .applyMatrix4().project() (3 matrix mults) per point. Same result,
+        // but the per-point cost during touch drops to a single multiply.
+        screenMat.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse).multiply(group.matrixWorld);
+      }
 
       for (let i = 0; i < COUNT; i++) {
         const p = particles[i];
@@ -539,7 +547,7 @@ function ParticleStar() {
         sizeAttr.setX(i, baseSize);
 
         if (hovering) {
-          tmpVec.set(lx, ly, lz).applyMatrix4(group.matrixWorld).project(camera);
+          tmpVec.set(lx, ly, lz).applyMatrix4(screenMat);
           const px = (tmpVec.x * 0.5 + 0.5) * width;
           const py = (1 - (tmpVec.y * 0.5 + 0.5)) * height;
           const dx = px - hoverX;
