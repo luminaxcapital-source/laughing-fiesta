@@ -52,7 +52,7 @@ function WaitlistModal({ onClose }: { onClose: () => void }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email }),
       });
-           if (res.status === 409) {
+      if (res.status === 409) {
         setError("You're already on the mail list!");
         return;
       }
@@ -300,10 +300,12 @@ function ParticleStar() {
     let R = 1;
     let sizeScale = 1;
     function computeR() {
+      const safeHeight = height || 1;
+      const safeWidth = width || 1;
       const worldHeight = 2 * camera.position.z * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2));
-      const pxPerWorldUnit = height / worldHeight;
-      R = (Math.min(width, height) * 0.36) / pxPerWorldUnit;
-      sizeScale = 0.5 * height / Math.tan(THREE.MathUtils.degToRad(camera.fov / 2));
+      const pxPerWorldUnit = safeHeight / worldHeight;
+      R = (Math.min(safeWidth, safeHeight) * 0.36) / pxPerWorldUnit;
+      sizeScale = 0.5 * safeHeight / Math.tan(THREE.MathUtils.degToRad(camera.fov / 2));
     }
     computeR();
 
@@ -442,8 +444,8 @@ function ParticleStar() {
     let hoverX = -99999;
     let hoverY = -99999;
 
-    const REPEL_RADIUS = 60;
-    const REPEL_STRENGTH = 2.4;
+    const REPEL_RADIUS = 90;
+    const REPEL_STRENGTH = 3.2;
 
     function onMouseMove(e: MouseEvent) {
       const rect = canvas!.getBoundingClientRect();
@@ -466,10 +468,9 @@ function ParticleStar() {
       const rect = canvas!.getBoundingClientRect();
       hoverX = t.clientX - rect.left;
       hoverY = t.clientY - rect.top;
-      const nx = (hoverX - rect.width / 2) / (rect.width / 2);
-      const ny = (hoverY - rect.height / 2) / (rect.height / 2);
-      targetTiltY = Math.max(-1, Math.min(1, nx)) * 0.4;
-      targetTiltX = Math.max(-1, Math.min(1, -ny)) * 0.28;
+      // No full-sphere tilt on touch — a finger dragging across the sphere
+      // felt disorienting when it also rotated the whole group; only the
+      // local repel dispersion near the finger is wanted here.
     }
     function onTouchEnd() {
       targetTiltX = 0;
@@ -581,6 +582,106 @@ function ParticleStar() {
 
   return <canvas ref={canvasRef} className="absolute inset-0 w-full h-full" />;
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   HERO
+═══════════════════════════════════════════════════════════════════════════ */
+function Hero({ onWaitlist }: { onWaitlist: () => void }) {
+  return (
+      <section
+        className="relative h-screen overflow-hidden flex items-center justify-center"
+        style={{
+          background: `
+            radial-gradient(ellipse 75% 60% at 50% 42%, rgba(110,90,190,0.20) 0%, transparent 62%),
+            radial-gradient(ellipse 55% 45% at 18% 85%, rgba(200,140,40,0.10) 0%, transparent 70%),
+            radial-gradient(ellipse 55% 45% at 85% 15%, rgba(90,70,170,0.12) 0%, transparent 70%),
+            linear-gradient(180deg, #0a0f1f 0%, #05080f 55%, #020306 100%)
+          `,
+        }}
+      >
+        {/* Animated particle star */}
+        <ParticleStar />
+
+        {/* Dark overlay: heavier on left, fades right */}
+        <div
+          className="absolute inset-0 pointer-events-none"
+          style={{ background: "linear-gradient(105deg, rgba(0,0,0,0.45) 0%, rgba(0,0,0,0.15) 40%, rgba(0,0,0,0.00) 70%)" }}
+        />
+
+        {/* Top vignette */}
+        <div
+          className="absolute top-0 left-0 right-0 h-[180px] pointer-events-none"
+          style={{ background: "linear-gradient(to bottom, rgba(4,10,22,0.75) 0%, transparent 100%)" }}
+        />
+
+        {/* Bottom vignette */}
+        <div
+          className="absolute bottom-0 left-0 right-0 h-[200px] pointer-events-none"
+          style={{ background: "linear-gradient(to top, rgba(4,10,22,0.90) 0%, transparent 100%)" }}
+        />
+
+        {/* Text column */}
+        <div className="relative z-[2] pt-[200px] pb-[100px] px-[24px] md:px-[56px] max-w-[820px] flex flex-col items-center text-center">
+
+          {/* Headline */}
+          <h1
+            className="font-normal uppercase text-white m-0 mb-6 leading-[1.22] tracking-[0.02em] text-center"
+            style={{
+              fontFamily: "'Unbounded', sans-serif",
+              fontSize: "clamp(20px, 6vw, 37.5px)",
+              textShadow: "0 2px 40px rgba(0,0,0,0.6)",
+            }}
+          >
+            The Home of<br />
+            On-Chain<br />
+            Investments
+          </h1>
+
+          {/* Subtitle */}
+          <p
+            className="font-sans font-bold leading-[1.72] text-white mb-12 text-center mx-auto md:whitespace-nowrap"
+            style={{ fontSize: "16px", textShadow: "0 1px 20px rgba(0,0,0,0.5)" }}
+          >
+            All-in one platform for digital assets.<br className="md:hidden" /> Stablecoins, RWAs, crypto and beyond
+          </p>
+
+          {/* CTA */}
+          <button
+            onClick={() => { burstParticles(); explodeParticles(); onWaitlist(); }}
+            className="relative overflow-hidden font-sans font-semibold text-[15px] rounded-full px-[30px] py-[15px] cursor-pointer transition-all duration-[220ms] tracking-[-0.1px]"
+            style={{
+              color: "#e8c374",
+              background: "linear-gradient(135deg, rgba(224,181,90,0.1) 0%, rgba(200,146,46,0.1) 100%)",
+              backdropFilter: "blur(6px)",
+              WebkitBackdropFilter: "blur(6px)",
+              boxShadow: "inset 0 1px 0 rgba(255,255,255,0.3), 0 4px 28px rgba(210,150,50,0.22), 0 0 40px rgba(210,150,50,0.08)",
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.transform = "translateY(-2px)";
+              e.currentTarget.style.color = "#07101e";
+              e.currentTarget.style.background =
+                "linear-gradient(120deg, #f8e2ab 0%, #e0b55a 22%, #c8922e 45%, #f4d78a 60%, #c8922e 78%, #e8c374 100%)";
+              e.currentTarget.style.boxShadow =
+                "inset 0 1px 0 rgba(255,255,255,0.8), inset 0 -6px 12px rgba(120,80,20,0.35), 0 8px 40px rgba(210,150,50,0.55), 0 0 60px rgba(210,150,50,0.3)";
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.transform = "translateY(0)";
+              e.currentTarget.style.color = "#e8c374";
+              e.currentTarget.style.background = "linear-gradient(135deg, rgba(224,181,90,0.1) 0%, rgba(200,146,46,0.1) 100%)";
+              e.currentTarget.style.boxShadow = "inset 0 1px 0 rgba(255,255,255,0.3), 0 4px 28px rgba(210,150,50,0.22), 0 0 40px rgba(210,150,50,0.08)";
+            }}
+          >
+            <span
+              className="pointer-events-none absolute inset-x-0 top-0 h-1/2 rounded-t-full"
+              style={{ background: "linear-gradient(to bottom, rgba(255,255,255,0.4), rgba(255,255,255,0))" }}
+            />
+            <span className="relative z-[1] inline-flex items-center gap-[10px]">
+              Join the Waitlist
+              <span className="w-6 h-6 rounded-full bg-white/[0.18] flex items-center justify-center">
+                <ChevronRight size={14} />
+              </span>
+            </span>
+          </button>
 
         </div>
 
