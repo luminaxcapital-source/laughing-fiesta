@@ -308,16 +308,12 @@ function ParticleStar() {
       hoverX = -99999;
       hoverY = -99999;
     }
-    function onTouchMove(e: TouchEvent) {
+        function onTouchMove(e: TouchEvent) {
       const t = e.touches[0];
       if (!t) return;
       const rect = canvas!.getBoundingClientRect();
       hoverX = t.clientX - rect.left;
       hoverY = t.clientY - rect.top;
-      const nx = (hoverX - rect.width / 2) / (rect.width / 2);
-      const ny = (hoverY - rect.height / 2) / (rect.height / 2);
-      targetTiltY = Math.max(-1, Math.min(1, nx)) * 0.4;
-      targetTiltX = Math.max(-1, Math.min(1, -ny)) * 0.28;
     }
     function onTouchEnd() {
       targetTiltX = 0;
@@ -408,16 +404,22 @@ function ParticleStar() {
         const y = rr * Math.cos(p.phi);
         const z = rr * Math.sin(p.phi) * Math.sin(p.theta + rotY);
 
-        const y2 = y * Math.cos(tiltX) - z * Math.sin(tiltX);
-        const z2 = y * Math.sin(tiltX) + z * Math.cos(tiltX);
-        const x3 = x * Math.cos(tiltY) + z2 * Math.sin(tiltY);
-        const z3 = -x * Math.sin(tiltY) + z2 * Math.cos(tiltY);
+                let x3 = x;
+        let y2 = y;
+        let z3 = z;
+        if (!isMobile) {
+          const z2 = y * Math.sin(tiltX) + z * Math.cos(tiltX);
+          y2 = y * Math.cos(tiltX) - z * Math.sin(tiltX);
+          x3 = x * Math.cos(tiltY) + z2 * Math.sin(tiltY);
+          z3 = -x * Math.sin(tiltY) + z2 * Math.cos(tiltY);
+        }
 
         if (hoverX > -50000) {
           const dx = (cx + x3) - hoverX;
           const dy = (cy + y2) - hoverY;
-          const dist = Math.sqrt(dx * dx + dy * dy);
-          if (dist < REPEL_RADIUS) {
+          const distSq = dx * dx + dy * dy;
+          if (distSq < REPEL_RADIUS * REPEL_RADIUS) {
+            const dist = Math.sqrt(distSq);
             p.vel += (1 - dist / REPEL_RADIUS) * REPEL_STRENGTH;
           }
         }
