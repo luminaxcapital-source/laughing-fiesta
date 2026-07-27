@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import {
   X, ChevronRight,
 } from "lucide-react";
+import * as THREE from "three";
 
 function burstParticles() {
   window.dispatchEvent(new Event("luminax-burst"));
