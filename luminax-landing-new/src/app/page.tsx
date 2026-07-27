@@ -248,7 +248,7 @@ function ParticleStar() {
     resize();
     window.addEventListener("resize", resize);
 
-    const COUNT = isMobile ? 900 : 3800;
+    const COUNT = isMobile ? 500 : 3800;
     const particles = Array.from({ length: COUNT }, () => {
       const u = Math.random();
       const v = Math.random();
@@ -266,7 +266,7 @@ function ParticleStar() {
       };
     });
 
-    const AMBIENT_COUNT = isMobile ? 70 : 450;
+    const AMBIENT_COUNT = isMobile ? 30 : 450;
     const ambient = Array.from({ length: AMBIENT_COUNT }, () => {
       const roll = Math.random();
       return {
@@ -402,7 +402,7 @@ function ParticleStar() {
         p.scale += p.vel * 0.05;
         p.scale = Math.max(0.05, Math.min(7, p.scale));
 
-        const breathe = 1 + Math.sin(time * 0.02 * p.breatheSpeed + p.breathePhase) * 0.09;
+                const breathe = isMobile ? 1 : 1 + Math.sin(time * 0.02 * p.breatheSpeed + p.breathePhase) * 0.09;
         const rr = R * p.scale * breathe;
         const x = rr * Math.sin(p.phi) * Math.cos(p.theta + rotY);
         const y = rr * Math.cos(p.phi);
@@ -413,12 +413,15 @@ function ParticleStar() {
         const x3 = x * Math.cos(tiltY) + z2 * Math.sin(tiltY);
         const z3 = -x * Math.sin(tiltY) + z2 * Math.cos(tiltY);
 
-        const dx = (cx + x3) - hoverX;
-        const dy = (cy + y2) - hoverY;
-        const dist = Math.sqrt(dx * dx + dy * dy);
-        if (dist < REPEL_RADIUS) {
-          p.vel += (1 - dist / REPEL_RADIUS) * REPEL_STRENGTH;
+        if (hoverX > -50000) {
+          const dx = (cx + x3) - hoverX;
+          const dy = (cy + y2) - hoverY;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+          if (dist < REPEL_RADIUS) {
+            p.vel += (1 - dist / REPEL_RADIUS) * REPEL_STRENGTH;
+          }
         }
+      
 
         proj.push({ x: x3, y: y2, z: z3, kind: p.kind, scale: p.scale, bright: p.bright });
       }
