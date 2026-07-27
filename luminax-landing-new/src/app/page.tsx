@@ -248,7 +248,7 @@ function ParticleStar() {
     resize();
     window.addEventListener("resize", resize);
 
-    const COUNT = isMobile ? 500 : 3800;
+    const COUNT = isMobile ? 1000 : 3800;
     const particles = Array.from({ length: COUNT }, () => {
       const u = Math.random();
       const v = Math.random();
@@ -266,7 +266,7 @@ function ParticleStar() {
       };
     });
 
-    const AMBIENT_COUNT = isMobile ? 30 : 450;
+    const AMBIENT_COUNT = isMobile ? 90 : 450;
     const ambient = Array.from({ length: AMBIENT_COUNT }, () => {
       const roll = Math.random();
       return {
