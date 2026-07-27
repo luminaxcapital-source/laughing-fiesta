@@ -223,43 +223,129 @@ function LandingNav({ onWaitlist, onLogin }: { onWaitlist: () => void; onLogin: 
 /* ═══════════════════════════════════════════════════════════════════════════
    PARTICLE STAR (animated background — reacts to mouse, bursts on CTA click)
 ═══════════════════════════════════════════════════════════════════════════ */
+const STAR_VERTEX_SHADER = `
+  attribute float aSize;
+  attribute vec3 aColor;
+  uniform float uPixelRatio;
+  uniform float uSizeScale;
+  varying vec3 vColor;
+  void main() {
+    vColor = aColor;
+    vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+    gl_PointSize = aSize * uPixelRatio * uSizeScale / -mvPosition.z;
+    gl_Position = projectionMatrix * mvPosition;
+  }
+`;
+const STAR_FRAGMENT_SHADER = `
+  varying vec3 vColor;
+  void main() {
+    vec2 uv = gl_PointCoord - vec2(0.5);
+    float d = length(uv);
+    float alpha = 1.0 - smoothstep(0.0, 0.5, d);
+    gl_FragColor = vec4(vColor, alpha);
+  }
+`;
+const AMBIENT_VERTEX_SHADER = `
+  attribute float aSize;
+  attribute vec3 aColor;
+  attribute float aPhase;
+  attribute float aSpeed;
+  uniform float uTime;
+  varying vec3 vColor;
+  varying float vTwinkle;
+  void main() {
+    vColor = aColor;
+    vTwinkle = 0.25 + 0.75 * (0.5 + 0.5 * sin(uTime * aSpeed + aPhase));
+    vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+    gl_PointSize = aSize;
+    gl_Position = projectionMatrix * mvPosition;
+  }
+`;
+const AMBIENT_FRAGMENT_SHADER = `
+  varying vec3 vColor;
+  varying float vTwinkle;
+  void main() {
+    vec2 uv = gl_PointCoord - vec2(0.5);
+    float d = length(uv);
+    float alpha = (1.0 - smoothstep(0.0, 0.5, d)) * vTwinkle * 0.85;
+    gl_FragColor = vec4(vColor, alpha);
+  }
+`;
+
+const GOLD = new THREE.Color(224 / 255, 181 / 255, 90 / 255);
+const VIOLET = new THREE.Color(140 / 255, 120 / 255, 230 / 255);
+const WHITE = new THREE.Color(1, 1, 1);
+
 function ParticleStar() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
 
-    const isMobile = window.innerWidth < 640;
-    const dpr = Math.min(window.devicePixelRatio || 1, isMobile ? 1 : 2);
-    let width = 0;
-    let height = 0;
+    let width = canvas.clientWidth || window.innerWidth;
+    let height = canvas.clientHeight || window.innerHeight;
 
-    function resize() {
-      const canvasEl = canvasRef.current;
-      if (!canvasEl) return;
-      width = canvasEl.clientWidth;
-      height = canvasEl.clientHeight;
-      canvasEl.width = width * dpr;
-      canvasEl.height = height * dpr;
-      ctx!.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+    renderer.setSize(width, height, false);
+
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(45, width / height, 0.1, 2000);
+    camera.position.z = 600;
+
+    const group = new THREE.Group();
+    scene.add(group);
+
+    let R = 1;
+    let sizeScale = 1;
+    function computeR() {
+      const worldHeight = 2 * camera.position.z * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2));
+      const pxPerWorldUnit = height / worldHeight;
+      R = (Math.min(width, height) * 0.36) / pxPerWorldUnit;
+      sizeScale = 0.5 * height / Math.tan(THREE.MathUtils.degToRad(camera.fov / 2));
     }
-    resize();
-    window.addEventListener("resize", resize);
+    computeR();
 
-    const COUNT = isMobile ? 1000 : 3800;
-    const particles = Array.from({ length: COUNT }, () => {
+    // Core glow sprite
+    const glowCanvas = document.createElement("canvas");
+    glowCanvas.width = 256;
+    glowCanvas.height = 256;
+    const gctx = glowCanvas.getContext("2d")!;
+    const grad = gctx.createRadialGradient(128, 128, 0, 128, 128, 128);
+    grad.addColorStop(0, "rgba(224,181,90,0.35)");
+    grad.addColorStop(0.55, "rgba(120,100,220,0.16)");
+    grad.addColorStop(1, "rgba(0,0,0,0)");
+    gctx.fillStyle = grad;
+    gctx.fillRect(0, 0, 256, 256);
+    const glowTexture = new THREE.CanvasTexture(glowCanvas);
+    const glowMaterial = new THREE.SpriteMaterial({
+      map: glowTexture,
+      transparent: true,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+    });
+    const glowSprite = new THREE.Sprite(glowMaterial);
+    scene.add(glowSprite);
+
+    const COUNT = 3800;
+    type Particle = {
+      ux: number; uy: number; uz: number;
+      scale: number; vel: number;
+      breathePhase: number; breatheSpeed: number;
+      bright: boolean; burstFactor: number;
+    };
+    const particles: Particle[] = Array.from({ length: COUNT }, () => {
       const u = Math.random();
       const v = Math.random();
-      const roll = Math.random();
+      const theta = 2 * Math.PI * u;
+      const phi = Math.acos(2 * v - 1);
       return {
-        theta: 2 * Math.PI * u,
-        phi: Math.acos(2 * v - 1),
+        ux: Math.sin(phi) * Math.cos(theta),
+        uy: Math.cos(phi),
+        uz: Math.sin(phi) * Math.sin(theta),
         scale: 1,
         vel: 0,
-        kind: roll < 0.45 ? "gold" : roll < 0.8 ? "violet" : "white",
         breathePhase: Math.random() * Math.PI * 2,
         breatheSpeed: 0.3 + Math.random() * 0.9,
         bright: Math.random() < 0.05,
@@ -267,22 +353,87 @@ function ParticleStar() {
       };
     });
 
-    const AMBIENT_COUNT = isMobile ? 90 : 450;
-    const ambient = Array.from({ length: AMBIENT_COUNT }, () => {
+    const starPositions = new Float32Array(COUNT * 3);
+    const starColors = new Float32Array(COUNT * 3);
+    const starSizes = new Float32Array(COUNT);
+    for (let i = 0; i < COUNT; i++) {
       const roll = Math.random();
-      return {
-        x: Math.random(),
-        y: Math.random(),
-        size: 0.6 + Math.random() * 2.2,
-        phase: Math.random() * Math.PI * 2,
-        speed: 0.6 + Math.random() * 1.4,
-        driftX: (Math.random() - 0.5) * 0.00009,
-        driftY: (Math.random() - 0.5) * 0.00007,
-        kind: roll < 0.4 ? "gold" : roll < 0.75 ? "violet" : "white",
-      };
+      const c = roll < 0.45 ? GOLD : roll < 0.8 ? VIOLET : WHITE;
+      starColors[i * 3] = c.r;
+      starColors[i * 3 + 1] = c.g;
+      starColors[i * 3 + 2] = c.b;
+    }
+    const starGeometry = new THREE.BufferGeometry();
+    starGeometry.setAttribute("position", new THREE.BufferAttribute(starPositions, 3));
+    starGeometry.setAttribute("aColor", new THREE.BufferAttribute(starColors, 3));
+    starGeometry.setAttribute("aSize", new THREE.BufferAttribute(starSizes, 1));
+    const starUniforms = {
+      uPixelRatio: { value: renderer.getPixelRatio() },
+      uSizeScale: { value: sizeScale },
+    };
+    const starMaterial = new THREE.ShaderMaterial({
+      vertexShader: STAR_VERTEX_SHADER,
+      fragmentShader: STAR_FRAGMENT_SHADER,
+      uniforms: starUniforms,
+      transparent: true,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
     });
+    const starPoints = new THREE.Points(starGeometry, starMaterial);
+    starPoints.frustumCulled = false;
+    group.add(starPoints);
 
-    let rotY = 0;
+    const AMBIENT_COUNT = 300;
+    const ambientPositions = new Float32Array(AMBIENT_COUNT * 3);
+    const ambientColors = new Float32Array(AMBIENT_COUNT * 3);
+    const ambientSizes = new Float32Array(AMBIENT_COUNT);
+    const ambientPhases = new Float32Array(AMBIENT_COUNT);
+    const ambientSpeeds = new Float32Array(AMBIENT_COUNT);
+    for (let i = 0; i < AMBIENT_COUNT; i++) {
+      const roll = Math.random();
+      const c = roll < 0.4 ? GOLD : roll < 0.75 ? VIOLET : WHITE;
+      ambientColors[i * 3] = c.r;
+      ambientColors[i * 3 + 1] = c.g;
+      ambientColors[i * 3 + 2] = c.b;
+      ambientPositions[i * 3] = (Math.random() - 0.5) * 1400;
+      ambientPositions[i * 3 + 1] = (Math.random() - 0.5) * 1400;
+      ambientPositions[i * 3 + 2] = (Math.random() - 0.5) * 300 - 200;
+      ambientSizes[i] = 1.5 + Math.random() * 4;
+      ambientPhases[i] = Math.random() * Math.PI * 2;
+      ambientSpeeds[i] = 0.6 + Math.random() * 1.4;
+    }
+    const ambientGeometry = new THREE.BufferGeometry();
+    ambientGeometry.setAttribute("position", new THREE.BufferAttribute(ambientPositions, 3));
+    ambientGeometry.setAttribute("aColor", new THREE.BufferAttribute(ambientColors, 3));
+    ambientGeometry.setAttribute("aSize", new THREE.BufferAttribute(ambientSizes, 1));
+    ambientGeometry.setAttribute("aPhase", new THREE.BufferAttribute(ambientPhases, 1));
+    ambientGeometry.setAttribute("aSpeed", new THREE.BufferAttribute(ambientSpeeds, 1));
+    const ambientUniforms = { uTime: { value: 0 } };
+    const ambientMaterial = new THREE.ShaderMaterial({
+      vertexShader: AMBIENT_VERTEX_SHADER,
+      fragmentShader: AMBIENT_FRAGMENT_SHADER,
+      uniforms: ambientUniforms,
+      transparent: true,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+    });
+    const ambientPoints = new THREE.Points(ambientGeometry, ambientMaterial);
+    ambientPoints.frustumCulled = false;
+    scene.add(ambientPoints);
+
+    function resize() {
+      const canvasEl = canvasRef.current;
+      if (!canvasEl) return;
+      width = canvasEl.clientWidth || width;
+      height = canvasEl.clientHeight || height;
+      renderer.setSize(width, height, false);
+      camera.aspect = width / height;
+      camera.updateProjectionMatrix();
+      computeR();
+      starUniforms.uSizeScale.value = sizeScale;
+    }
+    window.addEventListener("resize", resize);
+
     let time = 0;
     let tiltX = 0;
     let tiltY = 0;
@@ -309,12 +460,16 @@ function ParticleStar() {
       hoverX = -99999;
       hoverY = -99999;
     }
-        function onTouchMove(e: TouchEvent) {
+    function onTouchMove(e: TouchEvent) {
       const t = e.touches[0];
       if (!t) return;
       const rect = canvas!.getBoundingClientRect();
       hoverX = t.clientX - rect.left;
       hoverY = t.clientY - rect.top;
+      const nx = (hoverX - rect.width / 2) / (rect.width / 2);
+      const ny = (hoverY - rect.height / 2) / (rect.height / 2);
+      targetTiltY = Math.max(-1, Math.min(1, nx)) * 0.4;
+      targetTiltX = Math.max(-1, Math.min(1, -ny)) * 0.28;
     }
     function onTouchEnd() {
       targetTiltX = 0;
@@ -344,54 +499,27 @@ function ParticleStar() {
     window.addEventListener("luminax-explode", onExplode);
     window.addEventListener("luminax-reform", onReform);
 
-        let raf = 0;
-    let frameCount = 0;
+    const tmpVec = new THREE.Vector3();
+    let raf = 0;
     function draw() {
       raf = requestAnimationFrame(draw);
-      if (isMobile) {
-        frameCount++;
-        if (frameCount % 2 !== 0) return;
-      }
-      ctx!.clearRect(0, 0, width, height);
-      rotY += 0.0011;
       time += 1;
       tiltX += (targetTiltX - tiltX) * 0.04;
       tiltY += (targetTiltY - tiltY) * 0.04;
+      group.rotation.y += 0.0011;
+      group.rotation.x = tiltX;
+      group.rotation.z = tiltY * -1;
 
-      const cx = width / 2;
-      const cy = height / 2;
-      const R = Math.min(width, height) * 0.36;
+      ambientUniforms.uTime.value = time * 0.02;
 
-      for (const a of ambient) {
-        a.x += a.driftX;
-        a.y += a.driftY;
-        if (a.x < 0) a.x += 1; else if (a.x > 1) a.x -= 1;
-        if (a.y < 0) a.y += 1; else if (a.y > 1) a.y -= 1;
+      const posAttr = starGeometry.getAttribute("position") as THREE.BufferAttribute;
+      const sizeAttr = starGeometry.getAttribute("aSize") as THREE.BufferAttribute;
+      const hovering = hoverX > -50000;
 
-        const twinkle = 0.25 + 0.75 * (0.5 + 0.5 * Math.sin(time * 0.02 * a.speed + a.phase));
-        const alpha = twinkle * 0.85;
-        const color =
-          a.kind === "gold"
-            ? `rgba(224,181,90,${alpha})`
-            : a.kind === "violet"
-              ? `rgba(140,120,230,${alpha})`
-              : `rgba(255,255,255,${alpha})`;
-        ctx!.beginPath();
-        ctx!.arc(a.x * width, a.y * height, a.size, 0, Math.PI * 2);
-        ctx!.fillStyle = color;
-        ctx!.fill();
-      }
+      if (hovering) group.updateMatrixWorld(true);
 
-      const glow = ctx!.createRadialGradient(cx, cy, 0, cx, cy, R * 0.55);
-      glow.addColorStop(0, "rgba(224,181,90,0.16)");
-      glow.addColorStop(0.55, "rgba(120,100,220,0.07)");
-      glow.addColorStop(1, "rgba(0,0,0,0)");
-      ctx!.fillStyle = glow;
-      ctx!.fillRect(cx - R * 0.6, cy - R * 0.6, R * 1.2, R * 1.2);
-
-      const proj: { x: number; y: number; z: number; kind: string; scale: number; bright: boolean }[] = [];
-
-      for (const p of particles) {
+      for (let i = 0; i < COUNT; i++) {
+        const p = particles[i];
         const target = exploded ? 1 + p.burstFactor : 1;
         p.vel += (target - p.scale) * 0.3;
         p.vel *= 0.6;
@@ -399,68 +527,33 @@ function ParticleStar() {
         p.scale += p.vel * 0.05;
         p.scale = Math.max(0.05, Math.min(7, p.scale));
 
-                const breathe = isMobile ? 1 : 1 + Math.sin(time * 0.02 * p.breatheSpeed + p.breathePhase) * 0.09;
+        const breathe = 1 + Math.sin(time * 0.02 * p.breatheSpeed + p.breathePhase) * 0.09;
         const rr = R * p.scale * breathe;
-        const x = rr * Math.sin(p.phi) * Math.cos(p.theta + rotY);
-        const y = rr * Math.cos(p.phi);
-        const z = rr * Math.sin(p.phi) * Math.sin(p.theta + rotY);
+        const lx = p.ux * rr;
+        const ly = p.uy * rr;
+        const lz = p.uz * rr;
 
-                let x3 = x;
-        let y2 = y;
-        let z3 = z;
-        if (!isMobile) {
-          const z2 = y * Math.sin(tiltX) + z * Math.cos(tiltX);
-          y2 = y * Math.cos(tiltX) - z * Math.sin(tiltX);
-          x3 = x * Math.cos(tiltY) + z2 * Math.sin(tiltY);
-          z3 = -x * Math.sin(tiltY) + z2 * Math.cos(tiltY);
-        }
+        posAttr.setXYZ(i, lx, ly, lz);
+        const baseSize = (p.bright ? 5.2 : 2.4) * Math.min(p.scale, 1.6);
+        sizeAttr.setX(i, baseSize);
 
-        if (hoverX > -50000) {
-          const dx = (cx + x3) - hoverX;
-          const dy = (cy + y2) - hoverY;
+        if (hovering) {
+          tmpVec.set(lx, ly, lz).applyMatrix4(group.matrixWorld).project(camera);
+          const px = (tmpVec.x * 0.5 + 0.5) * width;
+          const py = (1 - (tmpVec.y * 0.5 + 0.5)) * height;
+          const dx = px - hoverX;
+          const dy = py - hoverY;
           const distSq = dx * dx + dy * dy;
           if (distSq < REPEL_RADIUS * REPEL_RADIUS) {
             const dist = Math.sqrt(distSq);
             p.vel += (1 - dist / REPEL_RADIUS) * REPEL_STRENGTH;
           }
         }
-      
-
-        proj.push({ x: x3, y: y2, z: z3, kind: p.kind, scale: p.scale, bright: p.bright });
       }
+      posAttr.needsUpdate = true;
+      sizeAttr.needsUpdate = true;
 
-      proj.sort((a, b) => a.z - b.z);
-
-      for (const pt of proj) {
-        const depth = (pt.z + R) / (2 * R);
-        const size = Math.max(0.1, (0.4 + depth * 1.7) * Math.min(pt.scale, 1.6));
-        const alpha = Math.max(0, Math.min(1, (0.15 + depth * 0.7) / Math.sqrt(Math.max(pt.scale, 1))));
-        if (!Number.isFinite(size) || !Number.isFinite(pt.x) || !Number.isFinite(pt.y)) continue;
-        const color =
-          pt.kind === "gold"
-            ? `rgba(224,181,90,${alpha})`
-            : pt.kind === "violet"
-              ? `rgba(140,120,230,${alpha})`
-              : `rgba(255,255,255,${alpha * 0.9})`;
-
-        if (pt.bright && !isMobile) {
-          const haloR = size * 5;
-          const halo = ctx!.createRadialGradient(cx + pt.x, cy + pt.y, 0, cx + pt.x, cy + pt.y, haloR);
-          const haloColor =
-            pt.kind === "gold" ? "224,181,90" : pt.kind === "violet" ? "140,120,230" : "255,255,255";
-          halo.addColorStop(0, `rgba(${haloColor},${alpha * 0.5})`);
-          halo.addColorStop(1, `rgba(${haloColor},0)`);
-          ctx!.beginPath();
-          ctx!.fillStyle = halo;
-          ctx!.arc(cx + pt.x, cy + pt.y, haloR, 0, Math.PI * 2);
-          ctx!.fill();
-        }
-
-                ctx!.beginPath();
-        ctx!.arc(cx + pt.x, cy + pt.y, pt.bright ? size * 1.8 : size, 0, Math.PI * 2);
-        ctx!.fillStyle = color;
-        ctx!.fill();
-      }
+      renderer.render(scene, camera);
     }
     draw();
 
@@ -476,111 +569,18 @@ function ParticleStar() {
       window.removeEventListener("touchmove", onTouchMove);
       window.removeEventListener("touchend", onTouchEnd);
       window.removeEventListener("touchcancel", onTouchEnd);
+      starGeometry.dispose();
+      starMaterial.dispose();
+      ambientGeometry.dispose();
+      ambientMaterial.dispose();
+      glowTexture.dispose();
+      glowMaterial.dispose();
+      renderer.dispose();
     };
   }, []);
 
   return <canvas ref={canvasRef} className="absolute inset-0 w-full h-full" />;
 }
-
-/* ═══════════════════════════════════════════════════════════════════════════
-   HERO
-═══════════════════════════════════════════════════════════════════════════ */
-function Hero({ onWaitlist }: { onWaitlist: () => void }) {
-  return (
-      <section
-        className="relative h-screen overflow-hidden flex items-center justify-center"
-        style={{
-          background: `
-            radial-gradient(ellipse 75% 60% at 50% 42%, rgba(110,90,190,0.20) 0%, transparent 62%),
-            radial-gradient(ellipse 55% 45% at 18% 85%, rgba(200,140,40,0.10) 0%, transparent 70%),
-            radial-gradient(ellipse 55% 45% at 85% 15%, rgba(90,70,170,0.12) 0%, transparent 70%),
-            linear-gradient(180deg, #0a0f1f 0%, #05080f 55%, #020306 100%)
-          `,
-        }}
-      >
-        {/* Animated particle star */}
-        <ParticleStar />
-
-        {/* Dark overlay: heavier on left, fades right */}
-        <div
-          className="absolute inset-0 pointer-events-none"
-          style={{ background: "linear-gradient(105deg, rgba(0,0,0,0.45) 0%, rgba(0,0,0,0.15) 40%, rgba(0,0,0,0.00) 70%)" }}
-        />
-
-        {/* Top vignette */}
-        <div
-          className="absolute top-0 left-0 right-0 h-[180px] pointer-events-none"
-          style={{ background: "linear-gradient(to bottom, rgba(4,10,22,0.75) 0%, transparent 100%)" }}
-        />
-
-        {/* Bottom vignette */}
-        <div
-          className="absolute bottom-0 left-0 right-0 h-[200px] pointer-events-none"
-          style={{ background: "linear-gradient(to top, rgba(4,10,22,0.90) 0%, transparent 100%)" }}
-        />
-
-        {/* Text column */}
-        <div className="relative z-[2] pt-[200px] pb-[100px] px-[24px] md:px-[56px] max-w-[820px] flex flex-col items-center text-center">
-
-          {/* Headline */}
-          <h1
-            className="font-normal uppercase text-white m-0 mb-6 leading-[1.22] tracking-[0.02em] text-center"
-            style={{
-              fontFamily: "'Unbounded', sans-serif",
-              fontSize: "clamp(20px, 6vw, 37.5px)",
-              textShadow: "0 2px 40px rgba(0,0,0,0.6)",
-            }}
-          >
-            The Home of<br />
-            On-Chain<br />
-            Investments
-          </h1>
-
-          {/* Subtitle */}
-          <p
-            className="font-sans font-bold leading-[1.72] text-white mb-12 text-center mx-auto md:whitespace-nowrap"
-            style={{ fontSize: "16px", textShadow: "0 1px 20px rgba(0,0,0,0.5)" }}
-          >
-            All-in one platform for digital assets.<br className="md:hidden" /> Stablecoins, RWAs, crypto and beyond
-          </p>
-
-          {/* CTA */}
-          <button
-            onClick={() => { burstParticles(); explodeParticles(); onWaitlist(); }}
-            className="relative overflow-hidden font-sans font-semibold text-[15px] rounded-full px-[30px] py-[15px] cursor-pointer transition-all duration-[220ms] tracking-[-0.1px]"
-            style={{
-              color: "#e8c374",
-              background: "linear-gradient(135deg, rgba(224,181,90,0.1) 0%, rgba(200,146,46,0.1) 100%)",
-              backdropFilter: "blur(6px)",
-              WebkitBackdropFilter: "blur(6px)",
-              boxShadow: "inset 0 1px 0 rgba(255,255,255,0.3), 0 4px 28px rgba(210,150,50,0.22), 0 0 40px rgba(210,150,50,0.08)",
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.transform = "translateY(-2px)";
-              e.currentTarget.style.color = "#07101e";
-              e.currentTarget.style.background =
-                "linear-gradient(120deg, #f8e2ab 0%, #e0b55a 22%, #c8922e 45%, #f4d78a 60%, #c8922e 78%, #e8c374 100%)";
-              e.currentTarget.style.boxShadow =
-                "inset 0 1px 0 rgba(255,255,255,0.8), inset 0 -6px 12px rgba(120,80,20,0.35), 0 8px 40px rgba(210,150,50,0.55), 0 0 60px rgba(210,150,50,0.3)";
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.transform = "translateY(0)";
-              e.currentTarget.style.color = "#e8c374";
-              e.currentTarget.style.background = "linear-gradient(135deg, rgba(224,181,90,0.1) 0%, rgba(200,146,46,0.1) 100%)";
-              e.currentTarget.style.boxShadow = "inset 0 1px 0 rgba(255,255,255,0.3), 0 4px 28px rgba(210,150,50,0.22), 0 0 40px rgba(210,150,50,0.08)";
-            }}
-          >
-            <span
-              className="pointer-events-none absolute inset-x-0 top-0 h-1/2 rounded-t-full"
-              style={{ background: "linear-gradient(to bottom, rgba(255,255,255,0.4), rgba(255,255,255,0))" }}
-            />
-            <span className="relative z-[1] inline-flex items-center gap-[10px]">
-              Join the Waitlist
-              <span className="w-6 h-6 rounded-full bg-white/[0.18] flex items-center justify-center">
-                <ChevronRight size={14} />
-              </span>
-            </span>
-          </button>
 
         </div>
 
