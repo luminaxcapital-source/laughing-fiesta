@@ -588,7 +588,7 @@ function ParticleStar() {
     };
   }, []);
 
-  return <canvas ref={canvasRef} className="absolute inset-0 w-full h-full" />;
+  return <canvas ref={canvasRef} className="absolute inset-0 w-full h-full touch-none select-none" />;
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
