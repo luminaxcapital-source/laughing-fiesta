@@ -423,6 +423,15 @@ function ParticleStar() {
     ambientPoints.frustumCulled = false;
     scene.add(ambientPoints);
 
+    // Cache the canvas rect. getBoundingClientRect() forces a synchronous
+    // layout reflow, so calling it on every touchmove (60-120x/sec) is what
+    // makes dragging janky on mobile. The rect only changes on resize/scroll,
+    // so we recompute it there and read the cached value in the hot path.
+    let canvasRect = canvas!.getBoundingClientRect();
+    function refreshRect() {
+      canvasRect = canvas!.getBoundingClientRect();
+    }
+
     function resize() {
       const canvasEl = canvasRef.current;
       if (!canvasEl) return;
@@ -433,8 +442,10 @@ function ParticleStar() {
       camera.updateProjectionMatrix();
       computeR();
       starUniforms.uSizeScale.value = sizeScale;
+      refreshRect();
     }
     window.addEventListener("resize", resize);
+    window.addEventListener("scroll", refreshRect, { passive: true });
 
     let time = 0;
     let tiltX = 0;
@@ -465,7 +476,7 @@ function ParticleStar() {
     function onTouchMove(e: TouchEvent) {
       const t = e.touches[0];
       if (!t) return;
-      const rect = canvas!.getBoundingClientRect();
+      const rect = canvasRect;
       hoverX = t.clientX - rect.left;
       hoverY = t.clientY - rect.top;
       // No full-sphere tilt on touch — a finger dragging across the sphere
@@ -502,6 +513,20 @@ function ParticleStar() {
 
     const tmpVec = new THREE.Vector3();
     const screenMat = new THREE.Matrix4();
+
+    // Optional on-screen FPS readout. Visit the site with ?fps in the URL
+    // (e.g. luminaxcapital.com/?fps) to see it. Never shown to real visitors.
+    const showFps = typeof location !== "undefined" && location.search.includes("fps");
+    let fpsEl: HTMLDivElement | null = null;
+    if (showFps) {
+      fpsEl = document.createElement("div");
+      fpsEl.style.cssText =
+        "position:fixed;top:8px;left:8px;z-index:99999;font:600 14px/1.2 monospace;color:#0f0;background:rgba(0,0,0,.6);padding:4px 8px;border-radius:6px;pointer-events:none";
+      document.body.appendChild(fpsEl);
+    }
+    let fpsLast = performance.now();
+    let fpsFrames = 0;
+
     let raf = 0;
     function draw() {
       raf = requestAnimationFrame(draw);
@@ -569,6 +594,7 @@ function ParticleStar() {
     return () => {
       cancelAnimationFrame(raf);
       window.removeEventListener("resize", resize);
+      window.removeEventListener("scroll", refreshRect);
       window.removeEventListener("luminax-burst", onBurst);
       window.removeEventListener("luminax-explode", onExplode);
       window.removeEventListener("luminax-reform", onReform);
